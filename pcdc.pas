@@ -96,18 +96,20 @@ var
 	arrayQuery: TQuery;
 	arrayPort: TPort;
 	localIp: string;
-	fileNameOut: string;
+	//fileNameOut: string;
 	giTotalPortsToCheck: integer;
-	rootDse: string;
-	gbDoResolve: boolean;				// Turn on or off the resolving of IP addresses.
-	gbDoCsv: boolean;
-	gbDoSql: boolean;
-	gsLocalFqdn: string;				// Local FQDN.
-	gaResolve: TResolve;				// 
+	//rootDse: string;
+	//gbDoResolve: boolean;				// Turn on or off the resolving of IP addresses.
+	//gbDoCsv: boolean;
+	//gbDoSql: boolean;
+	//gsLocalFqdn: string;				// Local FQDN.
+	//gaResolve: TResolve;				// 
 	gThisFqdn: string;
 	
 
 function DoPortQuery(remoteIp: string; port: string; protocol: string): integer;
+//
+//	Use PortQry.exe to check if a port is open.
 //
 // -n <IP or hostname>
 // -e <port>
@@ -138,92 +140,64 @@ begin
 	DoPortQuery := p.ExitStatus; 
 end; // of procedure DoPortQuery.
 
-{
-procedure GetAllDomainTrusts();
+
+function ResolveIp(fqdn: string): string;
 //
-//	Use ADFIND to make a list to get all trusts into a file trust.tmp
+// Resolve a Fully Qualified Domain Name (FQDN) from a IP address.
+// Using nslookup.exe.
+//		
+//		C:\>nslookup 10.4.68.19
+//		Server:  ns00nc0102.ns.nl
+//		Address:  10.4.34.11
 //
-var
+//		Name:    ns00dc014.prod.ns.nl
+//		Address:  10.4.68.19
+//
+const
+	TMP_FILE = 'nslookup.tmp';
+var	
 	p: TProcess;
 	f: TextFile;
+	line: string;	// Read a line from the nslookup.tmp file.
+	r: string;		// Result of the function to return.
 begin
-	WriteLn;
-	WriteLn('GetAllDomainTrusts()');
-
+	// Result will be the ip address when no resolve can be done.
+	r := '';
+	
 	p := TProcess.Create(nil);
-
 	p.Executable := 'cmd.exe'; 
-    p.Parameters.Add('/c adfind.exe -b "CN=System,' + rootDse + '" -f "(objectClass=trustedDomain)" trustPartner -csv  -nodn -nocsvheader -nocsvq >trusts.tmp');
-	p.Options := [poWaitOnExit];	// Wait until the external program is finished.
+    p.Parameters.Add('/c nslookup -timeout=5 ' + fqdn + '>' + TMP_FILE);
+	p.Options := [poWaitOnExit];
 	p.Execute;
 	
-	// Fix for hit own domain! ISSUE-9
-	WriteLn('Current DNS Domain is: ', GetDnsDomain());
-	AssignFile(f, 'trusts.tmp');
-	Append(f); // Open file to add!
-	WriteLn(f,  GetDnsDomain());
-	CloseFile(f);
-end; // of procedure GetAllDomainTrusts
-}
-
-
-
-function GetFqdn(searchIp: string): string;
-//
-// Search for the searchIp, returns the FQDN.
-//
-// Returns 'N/A' when not found.
-//
-var
-	r: string;
-	i: integer;
-begin
-	r := 'N/A';
+	// Open the text file and read the lines from it.
+	Assign(f, TMP_FILE);
 	
-	for i := 0 to High(gaResolve) do
-	begin
-		if searchIp = gaResolve[i].ip then
+	{I+}
+	Reset(f);
+	repeat
+		ReadLn(f, line);
+		//WriteLn('ResolveFqdn(): ', line);
+		if Pos('Name:', line) > 0 then
 		begin
-			r := gaResolve[i].fqdn;
-			WriteLn('FOUND FQDN ', r,  ' FOR IP ', searchIp);
-			break;
+			// This is the line with 'Name:' in it.
+			// Get the next line that contains the IP
+			ReadLn(f, line);
+			// Remove 'Name:' from the line and trim the result.
+			r := Trim(StringReplace(line, 'Address:', '', [rfIgnoreCase]));
 		end;
-	end; // of for.
-	GetFqdn := r;
-end; // of function GetFqdn.
+	until Eof(f);
+	Close(f);
+	
+	// Delete the temp file.
+	DeleteFile(TMP_FILE);
+	
+	ResolveIp := r;
+end; // of function ResolveIp.
 
-{
-procedure PortQueryAdd(newLocalIp: string; newRemoteIp: string; newPort: string; newProtocol: string);
-var
-	i: integer;
-begin
-	i := Length(arrayQueryPorts);
-	
-	SetLength(arrayQueryPorts, i + 1);
-	arrayQueryPorts[i].localIp := newLocalIp;
-	arrayQueryPorts[i].remoteIp := newRemoteIp;
-	arrayQueryPorts[i].port := newPort;
-	arrayQueryPorts[i].protocol := newProtocol;
-	
-	giTotalPortsToCheck := giTotalPortsToCheck + 1
-end; // of procedure PortQueryAdd.
-} 
-{
-procedure CheckAdd(newLocalIp: string; newRemoteIp: string; newPort: string; newProtocol: string);
-var
-	i: integer;
-begin
-	i := Length(arrayQueryPorts);
-	
-	SetLength(arrayQueryPorts, i + 1);
-	arrayQueryPorts[i].localIp := newLocalIp;
-	arrayQueryPorts[i].remoteIp := newRemoteIp;
-	arrayQueryPorts[i].port := newPort;
-	arrayQueryPorts[i].protocol := newProtocol;
-	
-	giTotalPortsToCheck := giTotalPortsToCheck + 1
-end; // of procedure PortQueryAdd.
-}
+
+
+
 
 procedure QueryAdd(newLocalHost: string; newRemoteHost: string; newPort: string; newProtocol: string);
 //
@@ -255,178 +229,54 @@ begin
 	WriteLn('QUERYSHOW()');
 	for x := 0 to High(arrayQuery) do
 	begin
-		WriteLn(arrayQuery[x].localHost, '   ', arrayQuery[x].remoteHost, '   ', arrayQuery[x].port, ' ', arrayQuery[x].protocol);
+		WriteLn(arrayQuery[x].checked, ' ', arrayQuery[x].localHost, ' (', arrayQuery[x].localIp, ')    ', arrayQuery[x].remoteHost, ' (', arrayQuery[x].remoteIp, ')  ', arrayQuery[x].port, ' ', arrayQuery[x].protocol, ' > ', arrayQuery[x].status);
 	end; // of for
 end; // of procedure QueryShow
 
-{
-procedure PortQueryShow();
-var
-	i:  integer;
-begin
-	WriteLn;
-	WriteLn('PortQueryShow()');
-	for i := 0 to High(arrayQueryPorts) do
-	begin
-		WriteLn(arrayQueryPorts[i].localIp + Chr(9) + arrayQueryPorts[i].remoteIp + Chr(9) + arrayQueryPorts[i].port + Chr(9) + arrayQueryPorts[i].protocol);
-	end;
-end;
-}
 
-{
-procedure PortQueryShowWithResult();
+procedure WriteQueryResultsToLog();
 var
-	i:  integer;
-begin
-	WriteLn;
-	WriteLn('PortQueryShowWithResult()');
-	for i := 0 to High(arrayQueryPorts) do
-	begin
-		WriteLn(arrayQueryPorts[i].localIp + TAB + arrayQueryPorts[i].remoteIp + TAB + arrayQueryPorts[i].port + TAB + arrayQueryPorts[i].protocol + TAB + IntToStr(arrayQueryPorts[i].status));
-	end;
-end;
-}
-
-{
-procedure ExportResultToCsv();
-//
-// Export the data in the arrayQueryPorts to an Excel CSV file.
-// Separator char is ; (#59)
-//
-const
-	SEP = #59; // ;
-
-var
-	i: integer;
+	x: integer;
+	l: Ansistring;
+	fname: string;
 	f: TextFile;
-	buffer: string;
 begin
-	AssignFile(f, fileNameOut + '.csv');
-
-	ReWrite(f);
+	fname := GetCurrentComputerName() + '_' + GetDateFs(true) + '.csv';
 	
-	WriteLn;
-	WriteLn('ExportResultToCsv() ' + fileNameOut + '.csv');
+	Assign(f, fname);
+	WriteLn(fname);
 	
-	// Write the header line in the CSV.
-	buffer := 'CheckedOn' + SEP; // Added for issue10
-	
-	buffer := buffer + 'LocalIp' + SEP;
-	if gbDoResolve = true then
-		buffer := buffer + 'LocalFqdn' + SEP;
-	buffer := buffer + 'RemoteIp' + SEP;
-	if gbDoResolve = true then
-		buffer := buffer + 'RemoteFqdn' + SEP;
-	buffer := buffer + 'Port' + SEP;
-	buffer := buffer + 'Protocol' + SEP;
-	buffer := buffer + 'Status';
-	WriteLn(f, buffer);
-	
-	for i := 0 to High(arrayQueryPorts) do
+	if FileExists(fname) = false then
 	begin
-		// Add the checked datetime to the line; issue10
-		buffer := arrayQueryPorts[i].checked + SEP;
-		
-		// Add the local IP to the buffer.
-		buffer := buffer + arrayQueryPorts[i].localIp + SEP;
-		
-		// Add the local FQDN to the buffer.
-		if gbDoResolve = true then
-			buffer := buffer + gsLocalFqdn + SEP;
-		
-		// Add the remote Ip to the buffer.
-		buffer := buffer + arrayQueryPorts[i].remoteIp + SEP;
-		
-		// Add the FQDN of the remote IP to the buffer.
-		if gbDoResolve = true then
-			buffer := buffer + GetFqdn(arrayQueryPorts[i].remoteIp) + SEP;
-			
-		// Add the port to buffer.
-		buffer := buffer + arrayQueryPorts[i].port + SEP;
-			
-		// Add the protocol to the buffer.
-		buffer := buffer + arrayQueryPorts[i].protocol + SEP;
+		// Create a new file and write a header to the file.
+		ReWrite(f);
+		WriteLn(f, 'check_dt;local_ip;local_host;remote_ip;remote_host;port;protocol;result');
+	end
+	else
+		Append(f);
 	
-		// Add the status of the PortQry to the buffer.
-		// Issue#3: fix. Do not export the number but letters for port query status:
-		//  L = Listening.
-		//	F = Failed listening port.
-		if arrayQueryPorts[i].status = 0 then
-			buffer := buffer + 'L'
+	for x := 0 to High(arrayQuery) do
+	begin
+		l := arrayQuery[x].checked + ';';
+		l := l + arrayQuery[x].localIp + ';';
+		l := l + arrayQuery[x].LocalHost + ';';
+		l := l + arrayQuery[x].remoteIp  + ';';
+		l := l + arrayQuery[x].remoteHost + ';';
+		l := l + arrayQuery[x].port + ';';
+		l := l + arrayQuery[x].protocol + ';';
+		if arrayQuery[x].status = 0 then
+			l := l + 'LISTENING'
 		else
-			buffer := buffer + 'F';
-	
-		//Write to screen.
-		//WriteLn(buffer);
+			l := l + 'FILTERED';
+		//l := l + IntToStr(arrayQuery[x].status);
 		
-		// Write to the CSV file.
-		WriteLn(f, buffer);
-	end;
-	CloseFile(f);
-end;
-}
+		WriteLn(f, l); 
+	end; // of for
+	Close(f);
+end; // of procedure WriteQueryResultsToLog
 
-{
 
-procedure ExportResultToSql();
-const
-	SEP = #59;
-var
-	i: integer;
-	f: TextFile;
-	sql: string;
-begin
-	AssignFile(f, fileNameOut + '.sql');
 
-	ReWrite(f);
-	
-	WriteLn;
-	WriteLn('ExportResultToSql() ' + fileNameOut + '.sql');
-	for i := 0 to High(arrayQueryPorts) do
-	begin
-		//WriteLn(arrayQueryPorts[i].localIp + TAB + arrayQueryPorts[i].remoteIp + TAB + arrayQueryPorts[i].port + TAB + arrayQueryPorts[i].protocol + TAB + IntToStr(arrayQueryPorts[i].status));
-		//WriteLn(f,arrayQueryPorts[i].localIp + SEP + arrayQueryPorts[i].remoteIp + SEP + arrayQueryPorts[i].port + SEP + arrayQueryPorts[i].protocol + SEP + IntToStr(arrayQueryPorts[i].status));
-		sql := 'INSERT INTO system_port_query ';
-		sql := sql + 'SET ';
-		//WriteLn(DateTimeToStr(Now));
-		//sql := sql + 'check_datetime=''' + GetProperDateTime(Now()) + ''',';
-		sql := sql + 'check_datetime=''' +arrayQueryPorts[i].checked + ''',';
-		sql := sql + 'local_ip=''' + arrayQueryPorts[i].localIp + ''',';
-		sql := sql + 'remote_ip=''' + arrayQueryPorts[i].remoteIp + ''',';
-		sql := sql + 'port=' + arrayQueryPorts[i].port + ',';
-		sql := sql + 'protocol=''' + arrayQueryPorts[i].protocol + ''',';
-		sql := sql + 'status=' + IntToStr(arrayQueryPorts[i].status) + ';';
-		
-		WriteLn(f, sql);
-	end;
-	CloseFile(f);
-end;
-}
-
-{
-procedure PortQueryOnAll();
-var
-	i: integer;
-	r: integer;
-begin
-	WriteLn;
-	WriteLn('PortQueryOnAll()');
-	for i := 0 to High(arrayQueryPorts) do
-	begin
-		//WriteLn(arrayQueryPorts[i].localIp + Chr(9) + arrayQueryPorts[i].remoteIp + Chr(9) + arrayQueryPorts[i].port + Chr(9) + arrayQueryPorts[i].protocol);
-		r := DoPortQuery(arrayQueryPorts[i].remoteIp, arrayQueryPorts[i].port, arrayQueryPorts[i].protocol);
-		
-		arrayQueryPorts[i].status := r;
-		
-		// Issue-5: Write the current date time in the checked field.
-		arrayQueryPorts[i].checked := GetProperDateTime(Now());
-		
-		// Fix issue#2: array loop is from 0 to high, display is i + 1.
-		//WriteLn(TAB, i + 1, '/', giTotalPortsToCheck, ':', TAB, arrayQueryPorts[i].remoteIp, ' (', arrayQueryPorts[i].port, '/', arrayQueryPorts[i].protocol, ')', TAB, 'RESULT=', r);
-		Write(TAB, i + 1, '/', giTotalPortsToCheck, ':', TAB, arrayQueryPorts[i].remoteIp, ' (', arrayQueryPorts[i].port, '/', arrayQueryPorts[i].protocol, ')', TAB, 'RESULT=', r, #13);
-	end;
-end;
-}
 
 procedure PortAdd(newPort: string; newProtocol: string);
 //
@@ -459,264 +309,6 @@ begin
 	end;
 end;
 
-{
-procedure GetIpsPerDnsDomain(dns: string);
-//
-// Do a nslookup and resolve all IP addresses of Domaion Controllers an AD domain.
-// Update the array to query the ports with PortQueryAdd().
-//
-var
-	p: TProcess;
-	f: TextFile;
-	line: String;
-	foundName: boolean;
-	foundCount: integer;
-	i: integer;
-	remoteIp: string;
-	fname: string;
-begin
-	WriteLn;
-	WriteLn('GetIpsPerDnsDomain(' + dns + ')');
-
-	fname := 'ipdc-' + dns + '.tmp';
-	
-	Sleep(1000);
-	
-	// Create a text file ipdc-domain.tmp
-	p := TProcess.Create(nil);
-	p.Executable := 'cmd.exe'; 
-    p.Parameters.Add('/c nslookup -timeout=5 ' + dns + '>' + fname);
-	p.Options := [poWaitOnExit];
-	p.Execute;
-	
-	foundName := false;
-	
-	// Open the text file and read the lines from it.
-	Assign(f, fname);
-	//I+
-	try
-		Reset(f);
-		repeat
-			ReadLn(f, line);
-			//WriteLn('GetIpsPerDnsDomain(): ',  line);
-		
-			If Pos('Name:', line) > 0 then
-			begin
-				// When the text 'Name:' is found. All the next lines contain 
-				// IP addresses of the Domain Controllers of the domain.
-				foundName := true;
-				foundCount := 0;
-			end;
-		
-			if foundName = true then
-			begin
-				foundCount := foundCount + 1;
-				if foundCount > 1 then
-				begin
-					//WriteLn(Chr(9), 'ONLY THIS LINES: ', foundCount, Chr(9), line);
-			
-					// Remove all text 'Address:' from the line.
-					remoteIp := Trim(StringReplace(line, 'Address:', '', [rfIgnoreCase]));
-				
-					// Remove all text 'Addresses:' from the newLine.
-					remoteIp := Trim(StringReplace(remoteIp, 'Addresses:', '', [rfIgnoreCase]));
-			
-					// Only add a new port to query when:
-					// 1) the remoteIP contains data,
-					// 2) It's a IPv4 address, skip IPv6 addresses.
-					if (Length(remoteIp) > 0) and (Pos(':', remoteIp) = 0) then
-					begin
-						for i := 0 to High(arrayPort) do
-						begin
-							// Increase the counter of tests to do.
-							//giTotalPortsToCheck := giTotalPortsToCheck + 1;
-							PortQueryAdd(localIp, remoteIp, arrayPort[i].port, arrayPort[i].protocol);
-						end;
-					end;
-				end;
-			end;
-		until Eof(f);
-		Close(f);
-	except
-		on E: EInOutError do
-			WriteLn('File ', fname, ' handeling error occurred, Details: ', E.ClassName, '/', E.Message);
-	end;
-end; // of procedure GetIpsPerDnsDomain.
-}
-
-{
-procedure GetAllDcIpPerDnsDomain();
-//
-//	Open the file trusts.tmp and obtain all IP addresses of domain controllers from a a domain.
-//
-var
-	f: TextFile;
-	line: String;
-	fname: string;
-begin
-	WriteLn;
-	WriteLn('GetAllDcsPerDnsDomain()');
-	
-	fname := 'trusts.tmp';
-	Assign(f, fname);
-	
-	//I+
-	try
-		Reset(f);
-		repeat
-			ReadLn(f, line);
-			//WriteLn(s);
-			GetIpsPerDnsDomain(LowerCase(line));
-		until Eof(f);
-		Close(f);
-	except
-		on E: EInOutError do
-			WriteLn('File ', fname, ' handeling error occurred, Details: ', E.ClassName, '/', E.Message);
-	end;
-end; // of procedure GetAllDcsPerDnsDomain.
-}
-
-{
-procedure ReadResolveConfig();
-//
-//	Read the fqdn resolve file and place in the array.
-//
-var
-	f: TextFile;
-	l: string;
-	i: integer;
-	aLine: TStringArray;
-begin
-	WriteLn('ReadResolveConfig(): Trying to open file: ', FNAME_FQDN);
-	
-	SetLength(aLine, 0);
-	
-	Assign(f, FNAME_FQDN);
-	//I+
-	try
-		Reset(f);
-		WriteLn('Opened');
-		repeat
-			ReadLn(f, l);
-			WriteLn(l);
-		
-			aLine := SplitString(l, ';');
-		
-			i := Length(gaResolve);
-			SetLength(gaResolve, i + 1);
-		
-			gaResolve[i].ip := aLine[0];
-			gaResolve[i].fqdn := aLine[1];
-		until Eof(f);
-		Close(f);
-	
-		// Show the contents of the array gaResolve.
-		for i := 0 To High(gaResolve) do
-		begin
-			WriteLn(gaResolve[i].ip, TAB, gaResolve[i].fqdn);
-		end; // of for.
-	except
-		on E: EInOutError do
-			WriteLn('File ', FNAME_FQDN, ' handeling error occurred, Details: ', E.ClassName, '/', E.Message);
-	end;
-end;
-}
-
-{
-procedure ReadConfigPort();
-var
-	f: TextFile;
-	l: string;
-	lineArray: TStringArray;
-begin
-	// Issue-4: Read the ports to query per DC from a config file.
-	// Set the lienArray on 0 (Clear it)
-	SetLength(lineArray, 0);
-	AssignFile(f, FNAME_PORT);
-	WriteLn('ReadConfigPort(): Trying to open file ', FNAME_PORT);
-	try
-		Reset(f);
-		WriteLn('Openend');
-		repeat
-			ReadLn(f, l);
-			// Split the line into the lineArray
-			lineArray := SplitString(l, ';');
-		
-			PortAdd(lineArray[0], lineArray[1]);
-		until Eof(f);
-		CloseFile(f);
-	except
-		on E: EInOutError do
-			WriteLn('File ', FNAME_PORT, ' handeling error occurred, Details: ', E.ClassName, '/', E.Message);
-	end;
-end;  // of procedure ReadConfigPort()
-}
-
-{
-procedure ReadConfigExtra();
-var
-	f: TextFile;
-	l: string;
-	lineArray: TStringArray;
-	fname: string;
-begin
-	// Issue-4: Read extra systems and ports from config file.
-	// Set the lienArray on 0 (Clear it)
-	SetLength(lineArray, 0);
-		
-	fname := 'pqdc-extra.conf';
-	AssignFile(f, fname);
-	//I+
-	try 
-		Reset(f);
-		repeat
-			ReadLn(f, l);
-			// Split the line into the lineArray
-			lineArray := SplitString(l, ';');
-		
-			PortQueryAdd(localIp, lineArray[0], lineArray[1], lineArray[2]);
-		until Eof(f);
-		CloseFile(f);
-	except
-		on E: EInOutError do
-			WriteLn('File ', fname, ' handeling error occurred, Details: ', E.ClassName, '/', E.Message);
-	end;
-end; // of procedure ReadConfigExtra
-}
-
-procedure ProgramTitle();
-begin
-	WriteLn();
-	WriteLn(StringOfChar('-', 80));
-	WriteLn(UpperCase(GetProgramName()) + ' -- Version: ' + VERSION + ' -- Unique ID: ' + ID);
-	WriteLn(DESCRIPTION);
-	WriteLn(StringOfChar('-', 80));	
-end; // of procedure ProgramTitle()
-
-
-procedure ProgramUsage();
-var
-	p:	string;
-begin
-	p := ParamStr(0);
-
-	WriteLn();
-	WriteLn('Switches:');
-	WriteLn(TAB + '--output-csv             Output in CSV format, separator char is '';''');
-	WriteLn(TAB + '--output-sql             Output in SQL format');
-	WriteLn(TAB + '--resolve-fqdn          	Also resolve the IP address to FQDN''s');
-	WriteLn(TAB + '--help, -h, -?           Show the help');
-	WriteLn();
-	WriteLn('Usage:');
-	WriteLn(TAB + p + ' [switche(s)]');
-	WriteLn();
-	WriteLn('Examples:');
-	WriteLn(TAB + p + ' --output-csv               Run the program an output in a CSV file.');
-	WriteLn(TAB + p + ' --output-csv --resolve     Run the program an output in a CSV file and resolve IP addresses to a FQDN''s.');
-	WriteLn(TAB + p + ' --output-sql               Run the program an output in a SQL import file.');
-	WriteLn;
-end; // of procedure ProgramUsage()
-
 
 procedure GetDomainControllers();
 //
@@ -734,8 +326,6 @@ begin
 	
 	fname := 'dc.tmp';
 	
-	Sleep(1000);
-	
 	// Create a text file ipdc-domain.tmp
 	p := TProcess.Create(nil);
 	p.Executable := 'cmd.exe'; 
@@ -750,7 +340,7 @@ begin
 		Reset(f);
 		repeat
 			ReadLn(f, line);
-			WriteLn(line);
+			//WriteLn(line);
 			
 			if gThisFqdn <> line then
 			begin
@@ -758,7 +348,7 @@ begin
 				// Now add a line per port per server to check
 				for x := 0 to High(arrayPort) do
 				begin
-					WriteLn(arrayPort[x].port);
+					//WriteLn(arrayPort[x].port);
 					
 					QueryAdd(gThisFqdn, line, arrayPort[x].port, arrayPort[x].protocol);
 					Inc(giTotalPortsToCheck);
@@ -786,6 +376,7 @@ var
 	line: string;
 	lineArray: TStringArray;
 begin
+	WriteLn('Getting all ports to check from config file.');
 	fname := 'pcdc-port.conf';
 	// Open the text file and read the lines from it.
 	Assign(f, fname);
@@ -794,7 +385,7 @@ begin
 		Reset(f);
 		repeat
 			ReadLn(f, line);
-			WriteLn(line);
+			//WriteLn(line);
 			lineArray := SplitString(line, ';');
 			PortAdd(lineArray[0], lineArray[1]);
 		until Eof(f);
@@ -809,14 +400,37 @@ end; // of procedure GetPorts
 procedure DoPortCheck();
 var
 	x: integer;
+	r: integer;	// Result of query
 begin
-	WriteLn('QUERYSHOW()');
+	WriteLn('DOPORTCHECK()');
 	for x := 0 to High(arrayQuery) do
 	begin
 		WriteLn(arrayQuery[x].localHost, '   ', arrayQuery[x].remoteHost, '   ', arrayQuery[x].port, ' ', arrayQuery[x].protocol);
-		WriteLn('  >', DoPortQuery(arrayQuery[x].remoteHost, arrayQuery[x].port, arrayQuery[x].protocol));
+		r := DoPortQuery(arrayQuery[x].remoteHost, arrayQuery[x].port, arrayQuery[x].protocol);
+		WriteLn('   RESULT>', r);
+		
+		arrayQuery[x].status := r; // Set the result of the check in the arrayQuery
+		
+		arrayQuery[x].checked := GetProperDateTime(Now()); // Set the date time of the check in the arrayQuery
 	end; // of for
 end; // of procedure DoPortCheck
+
+
+procedure DoResolveIp();
+var
+	x: integer;
+	
+	remoteIp: string;
+begin
+	WriteLn('DORESOLVEIP()');
+	for x := 0 to High(arrayQuery) do
+	begin
+		remoteIp := ResolveIp(arrayQuery[x].remoteHost);
+		
+		arrayQuery[x].localIp := localIp;
+		arrayQuery[x].remoteIp := remoteIp;
+	end; // of for
+end; // of procedure DoResolveIp()
 
 
 procedure ProgInit();
@@ -826,82 +440,31 @@ procedure ProgInit();
 begin
 	gThisFqdn := UpperCase(GetCurrentComputerName()) + '.' + LowerCase(GetDnsDomain());
 	giTotalPortsToCheck := 0;
-	
-	WriteLn('This computer FQDN: ' + gThisFqdn);
+	localIp := ResolveIp(gThisFqdn);
+
+	WriteLn('This computer FQDN: ' + gThisFqdn, ' ', localIp);
 
 	GetPorts();
-	PortShow();
+	//PortShow();
 	
 	GetDomainControllers();
-	QueryShow();
+	//QueryShow();
 	
 	WriteLn('Total number of ports to check: ', giTotalPortsToCheck);
 	
 end; // of procedure ProgInit
 
+
 procedure ProgRun();
 begin
+	WriteLn(ResolveIp('VM60DC002.test.ns.nl'));
+
 	DoPortCheck();
+	DoResolveIp();
+	QueryShow();
+	WriteQueryResultsToLog();
 end;
 
-{
-
-procedure ProgRun();
-begin
-	// Query all domain trusts
-	GetAllDomainTrusts();
-
-	// Query all DC's per domain trust using NSLOOKUP.
-	GetAllDcIpPerDnsDomain();
-	
-	//PortQueryShow();
-	WriteLn('There are ', giTotalPortsToCheck, ' ports found to be tested.');
-	
-	// Perform a port query per port.
-	PortQueryOnAll();
-	
-	// Make all the output as requested by the command line options.
-	if gbDoCsv = true then
-		// Output to CSV when selected on the command line.
-		ExportResultToCsv();
-		
-	if gbDoSql = true then
-		// Output to SQL when selected on the command line.
-		ExportResultToSql();
-end; // of procedure ProgInit
-}
-
-{
-procedure ProgTest();
-begin
-	//WriteLn(GetBaseDn());
-	//WriteLn(ResolveFqdn('10.145.193.15'));
-	
-	WriteLn('PROGTEST()');
-	ReadConfigPort();
-	ReadResolveConfig();
-	//localIp := GetLocalIp();
-	//WriteLn('LOCALIP=', localIp);
-	
-	//gsLocalFqdn := ResolveFqdnDc(localIp);
-	//WriteLn('gsLocalFqdn=', gsLocalFqdn);
-	
-	
-	//WriteLn(GetFqdn('10.4.34.12'));
-	
-	ip := '10.4.68.17';
-	WriteLn('RESOLVE ' + ip + ' TO FQDN: ' + ResolveFqdnDc(ip));
-
-	ip := '10.4.68.20';
-	WriteLn('RESOLVE ' + ip + ' TO FQDN: ' + ResolveFqdnDc(ip));
-
-	ip := '10.4.68.14';
-	WriteLn('RESOLVE ' + ip + ' TO FQDN: ' + ResolveFqdnDc(ip));
-
-	//ip := '10.4.68.16';
-	//WriteLn('RESOLVE ' + ip + ' TO FQDN: ' + ResolveFqdnDc(ip));
-end; // of procedure ProgTest
-}
 
 procedure ProgDone();
 begin
