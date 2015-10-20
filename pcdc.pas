@@ -66,17 +66,6 @@ const
 	
 
 type
-	RCheck = record
-		checkDateTime: string;
-		localIp: string;
-		localHost: string;
-		remoteIp: string;
-		remoteHost: string;
-		port: string;
-		protocol: string;
-		status: string;
-	end; // of Record RCheck
-
 	RPort = record
 		port: string;
 		portDescription: string;
@@ -84,18 +73,17 @@ type
 	end; // of record RPort
 	TPort = array of RPort;
 	
-	
-	RQueryPorts = record
+	RQuery = record
 		checked: string;		// The date and time when checked
 		localIp: string;		// The local IP of the current server.
+		localHost: string;
 		remoteIp: string;		// The remote IP to check the port on.
+		remoteHost: string;
 		port: string;			// The port number to check.
 		protocol: string;		// The protocol to test: UDP or TCP.
 		status: integer;		// Result of the portqry. 0=OK, 1=NOT LISTENING, 2=FILTERED or LISTENING
 	end; // of record RQueryPorts.
-	TQueryPorts = array of RQueryPorts;
-
-	
+	TQuery = array of RQuery;
 
 	RResolve = record
 		ip: string;				// IP address
@@ -105,7 +93,7 @@ type
 	
 	
 var
-	arrayQueryPorts: TQueryPorts;
+	arrayQuery: TQuery;
 	arrayPort: TPort;
 	localIp: string;
 	fileNameOut: string;
@@ -116,6 +104,7 @@ var
 	gbDoSql: boolean;
 	gsLocalFqdn: string;				// Local FQDN.
 	gaResolve: TResolve;				// 
+	gThisFqdn: string;
 	
 
 function DoPortQuery(remoteIp: string; port: string; protocol: string): integer;
@@ -149,7 +138,7 @@ begin
 	DoPortQuery := p.ExitStatus; 
 end; // of procedure DoPortQuery.
 
-
+{
 procedure GetAllDomainTrusts();
 //
 //	Use ADFIND to make a list to get all trusts into a file trust.tmp
@@ -175,6 +164,8 @@ begin
 	WriteLn(f,  GetDnsDomain());
 	CloseFile(f);
 end; // of procedure GetAllDomainTrusts
+}
+
 
 
 function GetFqdn(searchIp: string): string;
@@ -201,7 +192,7 @@ begin
 	GetFqdn := r;
 end; // of function GetFqdn.
 
-
+{
 procedure PortQueryAdd(newLocalIp: string; newRemoteIp: string; newPort: string; newProtocol: string);
 var
 	i: integer;
@@ -216,8 +207,59 @@ begin
 	
 	giTotalPortsToCheck := giTotalPortsToCheck + 1
 end; // of procedure PortQueryAdd.
+} 
+{
+procedure CheckAdd(newLocalIp: string; newRemoteIp: string; newPort: string; newProtocol: string);
+var
+	i: integer;
+begin
+	i := Length(arrayQueryPorts);
+	
+	SetLength(arrayQueryPorts, i + 1);
+	arrayQueryPorts[i].localIp := newLocalIp;
+	arrayQueryPorts[i].remoteIp := newRemoteIp;
+	arrayQueryPorts[i].port := newPort;
+	arrayQueryPorts[i].protocol := newProtocol;
+	
+	giTotalPortsToCheck := giTotalPortsToCheck + 1
+end; // of procedure PortQueryAdd.
+}
+
+procedure QueryAdd(newLocalHost: string; newRemoteHost: string; newPort: string; newProtocol: string);
+//
+//	Add a new record to the ArrayQuery
+//
+//		newLocalHost
+//		newRemoteHost
+//		newPort
+//		newProtocol
+//
+var
+	x: integer;
+begin
+	x := Length(arrayQuery);
+	
+	SetLength(arrayQuery, x + 1); // Increase the size with 1
+	
+	arrayQuery[x].localHost := newLocalHost;
+	arrayQuery[x].remoteHost := newRemoteHost;
+	arrayQuery[x].port := newPort;
+	arrayQuery[x].protocol := newProtocol;
+end; // of procedure QueryAdd
 
 
+procedure QueryShow();
+var
+	x: integer;
+begin
+	WriteLn('QUERYSHOW()');
+	for x := 0 to High(arrayQuery) do
+	begin
+		WriteLn(arrayQuery[x].localHost, '   ', arrayQuery[x].remoteHost, '   ', arrayQuery[x].port, ' ', arrayQuery[x].protocol);
+	end; // of for
+end; // of procedure QueryShow
+
+{
 procedure PortQueryShow();
 var
 	i:  integer;
@@ -229,8 +271,9 @@ begin
 		WriteLn(arrayQueryPorts[i].localIp + Chr(9) + arrayQueryPorts[i].remoteIp + Chr(9) + arrayQueryPorts[i].port + Chr(9) + arrayQueryPorts[i].protocol);
 	end;
 end;
+}
 
-
+{
 procedure PortQueryShowWithResult();
 var
 	i:  integer;
@@ -242,8 +285,9 @@ begin
 		WriteLn(arrayQueryPorts[i].localIp + TAB + arrayQueryPorts[i].remoteIp + TAB + arrayQueryPorts[i].port + TAB + arrayQueryPorts[i].protocol + TAB + IntToStr(arrayQueryPorts[i].status));
 	end;
 end;
+}
 
-
+{
 procedure ExportResultToCsv();
 //
 // Export the data in the arrayQueryPorts to an Excel CSV file.
@@ -320,7 +364,9 @@ begin
 	end;
 	CloseFile(f);
 end;
+}
 
+{
 
 procedure ExportResultToSql();
 const
@@ -355,8 +401,9 @@ begin
 	end;
 	CloseFile(f);
 end;
+}
 
-
+{
 procedure PortQueryOnAll();
 var
 	i: integer;
@@ -379,7 +426,7 @@ begin
 		Write(TAB, i + 1, '/', giTotalPortsToCheck, ':', TAB, arrayQueryPorts[i].remoteIp, ' (', arrayQueryPorts[i].port, '/', arrayQueryPorts[i].protocol, ')', TAB, 'RESULT=', r, #13);
 	end;
 end;
-
+}
 
 procedure PortAdd(newPort: string; newProtocol: string);
 //
@@ -412,7 +459,7 @@ begin
 	end;
 end;
 
-
+{
 procedure GetIpsPerDnsDomain(dns: string);
 //
 // Do a nslookup and resolve all IP addresses of Domaion Controllers an AD domain.
@@ -446,7 +493,7 @@ begin
 	
 	// Open the text file and read the lines from it.
 	Assign(f, fname);
-	{I+}
+	//I+
 	try
 		Reset(f);
 		repeat
@@ -495,8 +542,9 @@ begin
 			WriteLn('File ', fname, ' handeling error occurred, Details: ', E.ClassName, '/', E.Message);
 	end;
 end; // of procedure GetIpsPerDnsDomain.
+}
 
-
+{
 procedure GetAllDcIpPerDnsDomain();
 //
 //	Open the file trusts.tmp and obtain all IP addresses of domain controllers from a a domain.
@@ -512,7 +560,7 @@ begin
 	fname := 'trusts.tmp';
 	Assign(f, fname);
 	
-	{I+}
+	//I+
 	try
 		Reset(f);
 		repeat
@@ -526,8 +574,9 @@ begin
 			WriteLn('File ', fname, ' handeling error occurred, Details: ', E.ClassName, '/', E.Message);
 	end;
 end; // of procedure GetAllDcsPerDnsDomain.
+}
 
-
+{
 procedure ReadResolveConfig();
 //
 //	Read the fqdn resolve file and place in the array.
@@ -543,7 +592,7 @@ begin
 	SetLength(aLine, 0);
 	
 	Assign(f, FNAME_FQDN);
-	{I+}
+	//I+
 	try
 		Reset(f);
 		WriteLn('Opened');
@@ -571,8 +620,9 @@ begin
 			WriteLn('File ', FNAME_FQDN, ' handeling error occurred, Details: ', E.ClassName, '/', E.Message);
 	end;
 end;
+}
 
-
+{
 procedure ReadConfigPort();
 var
 	f: TextFile;
@@ -600,8 +650,9 @@ begin
 			WriteLn('File ', FNAME_PORT, ' handeling error occurred, Details: ', E.ClassName, '/', E.Message);
 	end;
 end;  // of procedure ReadConfigPort()
+}
 
-
+{
 procedure ReadConfigExtra();
 var
 	f: TextFile;
@@ -615,7 +666,7 @@ begin
 		
 	fname := 'pqdc-extra.conf';
 	AssignFile(f, fname);
-	{I+}
+	//I+
 	try 
 		Reset(f);
 		repeat
@@ -631,7 +682,7 @@ begin
 			WriteLn('File ', fname, ' handeling error occurred, Details: ', E.ClassName, '/', E.Message);
 	end;
 end; // of procedure ReadConfigExtra
-
+}
 
 procedure ProgramTitle();
 begin
@@ -677,8 +728,10 @@ var
 	p: TProcess;
 	line: string;
 	f: TextFile;
+	x: integer;
 begin
 	WriteLn('Getting the domain controllers of the current AD domain, please wait...');
+	
 	fname := 'dc.tmp';
 	
 	Sleep(1000);
@@ -698,6 +751,21 @@ begin
 		repeat
 			ReadLn(f, line);
 			WriteLn(line);
+			
+			if gThisFqdn <> line then
+			begin
+			
+				// Now add a line per port per server to check
+				for x := 0 to High(arrayPort) do
+				begin
+					WriteLn(arrayPort[x].port);
+					
+					QueryAdd(gThisFqdn, line, arrayPort[x].port, arrayPort[x].protocol);
+					Inc(giTotalPortsToCheck);
+				end; // of for
+			end; // of if
+			
+			
 		
 		until Eof(f);
 		Close(f);
@@ -716,6 +784,7 @@ var
 	fname: string;
 	f: TextFile;
 	line: string;
+	lineArray: TStringArray;
 begin
 	fname := 'pcdc-port.conf';
 	// Open the text file and read the lines from it.
@@ -726,7 +795,8 @@ begin
 		repeat
 			ReadLn(f, line);
 			WriteLn(line);
-		
+			lineArray := SplitString(line, ';');
+			PortAdd(lineArray[0], lineArray[1]);
 		until Eof(f);
 		Close(f);
 	except
@@ -736,16 +806,45 @@ begin
 end; // of procedure GetPorts
 
 
+procedure DoPortCheck();
+var
+	x: integer;
+begin
+	WriteLn('QUERYSHOW()');
+	for x := 0 to High(arrayQuery) do
+	begin
+		WriteLn(arrayQuery[x].localHost, '   ', arrayQuery[x].remoteHost, '   ', arrayQuery[x].port, ' ', arrayQuery[x].protocol);
+		WriteLn('  >', DoPortQuery(arrayQuery[x].remoteHost, arrayQuery[x].port, arrayQuery[x].protocol));
+	end; // of for
+end; // of procedure DoPortCheck
+
 
 procedure ProgInit();
 //
 //	Program initializer procedure
 //
 begin
+	gThisFqdn := UpperCase(GetCurrentComputerName()) + '.' + LowerCase(GetDnsDomain());
+	giTotalPortsToCheck := 0;
+	
+	WriteLn('This computer FQDN: ' + gThisFqdn);
+
 	GetPorts();
+	PortShow();
+	
 	GetDomainControllers();
+	QueryShow();
+	
+	WriteLn('Total number of ports to check: ', giTotalPortsToCheck);
+	
 end; // of procedure ProgInit
 
+procedure ProgRun();
+begin
+	DoPortCheck();
+end;
+
+{
 
 procedure ProgRun();
 begin
@@ -770,8 +869,9 @@ begin
 		// Output to SQL when selected on the command line.
 		ExportResultToSql();
 end; // of procedure ProgInit
+}
 
-
+{
 procedure ProgTest();
 begin
 	//WriteLn(GetBaseDn());
@@ -789,7 +889,6 @@ begin
 	
 	//WriteLn(GetFqdn('10.4.34.12'));
 	
-	{
 	ip := '10.4.68.17';
 	WriteLn('RESOLVE ' + ip + ' TO FQDN: ' + ResolveFqdnDc(ip));
 
@@ -798,11 +897,11 @@ begin
 
 	ip := '10.4.68.14';
 	WriteLn('RESOLVE ' + ip + ' TO FQDN: ' + ResolveFqdnDc(ip));
-	}
+
 	//ip := '10.4.68.16';
 	//WriteLn('RESOLVE ' + ip + ' TO FQDN: ' + ResolveFqdnDc(ip));
 end; // of procedure ProgTest
-
+}
 
 procedure ProgDone();
 begin
@@ -811,7 +910,7 @@ end; // of procedure ProgInit
 
 begin
 	ProgInit();
-	//ProgRun();
+	ProgRun();
 	//ProgTest();
 	//ProgDone();
 end. // of program PortQueryDomainController.
