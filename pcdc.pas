@@ -1,6 +1,6 @@
 //
 //	PROGRAM:
-//		PortQueryDomainController.exe (pqdc)
+//		PortCheckDomainController.exe (pcdc)
 //
 //	DESCRIPTION:
 //		Run this on a domain controller
@@ -73,12 +73,14 @@ type
 	end; // of record RPort
 	TPort = array of RPort;
 	
-	RQuery = record
+	RQuery = record				// Record of Query
 		checked: string;		// The date and time when checked
 		localIp: string;		// The local IP of the current server.
 		localHost: string;
+		localFqdn: string;		
 		remoteIp: string;		// The remote IP to check the port on.
 		remoteHost: string;
+		remoteFqdn: string;
 		port: string;			// The port number to check.
 		protocol: string;		// The protocol to test: UDP or TCP.
 		status: integer;		// Result of the portqry. 0=OK, 1=NOT LISTENING, 2=FILTERED or LISTENING
@@ -104,8 +106,10 @@ var
 	//gbDoSql: boolean;
 	//gsLocalFqdn: string;				// Local FQDN.
 	//gaResolve: TResolve;				// 
-	gThisFqdn: string;
-	
+	thisFqdn: string;					// Contains the current computer FQDN
+	thisHost: string;					// Contains the host name of the current computer
+	setDateTime: string;				// Contains the date time of program start, used for the set date time. Combine all checks in 1 program run.
+		
 
 function DoPortQuery(remoteIp: string; port: string; protocol: string): integer;
 //
@@ -196,9 +200,6 @@ begin
 end; // of function ResolveIp.
 
 
-
-
-
 procedure QueryAdd(newLocalHost: string; newRemoteHost: string; newPort: string; newProtocol: string);
 //
 //	Add a new record to the ArrayQuery
@@ -276,8 +277,6 @@ begin
 end; // of procedure WriteQueryResultsToLog
 
 
-
-
 procedure PortAdd(newPort: string; newProtocol: string);
 //
 // Add a new port to the query array.
@@ -310,7 +309,7 @@ begin
 end;
 
 
-procedure GetDomainControllers();
+procedure FillQueryArray();
 //
 //	Get a list of all domain controllers belonging to the current domain of this domain controller.
 //	Use adfind.exe -sc dclist
@@ -321,6 +320,7 @@ var
 	line: string;
 	f: TextFile;
 	x: integer;
+	remoteHost: string;
 begin
 	WriteLn('Getting the domain controllers of the current AD domain, please wait...');
 	
@@ -341,10 +341,14 @@ begin
 		repeat
 			ReadLn(f, line);
 			//WriteLn(line);
+			remoteHost := LeftStr(line, Pos('.', line) - 1);
 			
-			if gThisFqdn <> line then
+			WriteLn(remoteHost);
+			
+			if thicHost <> remoteHost then
+			//if gThisFqdn <> line then
 			begin
-			
+				// Only process the other DC's. Do not check yourself!
 				// Now add a line per port per server to check
 				for x := 0 to High(arrayPort) do
 				begin
@@ -354,7 +358,7 @@ begin
 					Inc(giTotalPortsToCheck);
 				end; // of for
 			end; // of if
-			
+			}
 			
 		
 		until Eof(f);
@@ -369,6 +373,7 @@ end;
 procedure GetPorts();
 //
 //	Read the ports to be checked from the file.
+//	Place the ports in a array to access again during the scan.
 //
 var
 	fname: string;
@@ -419,7 +424,6 @@ end; // of procedure DoPortCheck
 procedure DoResolveIp();
 var
 	x: integer;
-	
 	remoteIp: string;
 begin
 	WriteLn('DORESOLVEIP()');
@@ -438,16 +442,22 @@ procedure ProgInit();
 //	Program initializer procedure
 //
 begin
-	gThisFqdn := UpperCase(GetCurrentComputerName()) + '.' + LowerCase(GetDnsDomain());
+	thisHost := GetCurrentComputerName();
+	thisFqdn := UpperCase(thisHost) + '.' + LowerCase(GetDnsDomain());
+	localIp := ResolveIp(thisFqdn);
 	giTotalPortsToCheck := 0;
-	localIp := ResolveIp(gThisFqdn);
 
-	WriteLn('This computer FQDN: ' + gThisFqdn, ' ', localIp);
+	setDateTime := GetProperDateTime(Now());
+	
+	WriteLn('Computer host name:  ' + thisHost);
+	WriteLn('Computer FQDN:       ' + thisFqdn);
+	WriteLn('Computer IP address: ' + localIp);
+	
 
 	GetPorts();
 	//PortShow();
 	
-	GetDomainControllers();
+	FillQueryArray();
 	//QueryShow();
 	
 	WriteLn('Total number of ports to check: ', giTotalPortsToCheck);
@@ -462,7 +472,7 @@ begin
 	DoPortCheck();
 	DoResolveIp();
 	QueryShow();
-	WriteQueryResultsToLog();
+	//WriteQueryResultsToLog();
 end;
 
 
