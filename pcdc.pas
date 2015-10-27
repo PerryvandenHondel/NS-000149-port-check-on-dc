@@ -230,7 +230,7 @@ begin
 	WriteLn('QUERYSHOW()');
 	for x := 0 to High(arrayQuery) do
 	begin
-		WriteLn(arrayQuery[x].checked, ' ', arrayQuery[x].localHost, ' (', arrayQuery[x].localIp, ')    ', arrayQuery[x].remoteHost, ' (', arrayQuery[x].remoteIp, ')  ', arrayQuery[x].port, ' ', arrayQuery[x].protocol, ' > ', arrayQuery[x].status);
+		WriteLn(x + 1:3, ': ' + arrayQuery[x].checked, ' ', arrayQuery[x].localHost, ' (', arrayQuery[x].localIp, ') >> ', arrayQuery[x].remoteHost, ' (', arrayQuery[x].remoteIp, ')  ', arrayQuery[x].port, ' ', arrayQuery[x].protocol, ' > ', arrayQuery[x].status);
 	end; // of for
 end; // of procedure QueryShow
 
@@ -275,6 +275,52 @@ begin
 	end; // of for
 	Close(f);
 end; // of procedure WriteQueryResultsToLog
+
+
+procedure WriteResultsToSplunk();
+var
+	x: integer;
+	l: Ansistring;
+	fname: string;
+	f: TextFile;
+begin
+	// Build the file name to store the Splunk data.
+	fname := GetProgramFolder() + '\' + thisHost + '\' + GetDateFs(true) + '.skv';
+	
+	// Create the folder tree to store the file.
+	MakeFolderTree(fname);
+	
+	// Assign the file and create (non-existing file) the file or reopen (existing file) it.
+	Assign(f, fname);
+	WriteLn(fname);
+	
+	if FileExists(fname) = false then
+	begin
+		// Create a new file and write a header to the file.
+		ReWrite(f);
+		//WriteLn(f, 'check_dt;local_ip;local_host;remote_ip;remote_host;port;protocol;result');
+	end
+	else
+		Append(f);
+
+	for x := 0 to High(arrayQuery) do
+	begin
+		l := setDateTime + ' ';
+		l := l + 'checked=' + EncloseDoubleQuote(arrayQuery[x].checked) + ' ';
+		l := l + 'remoteHost=' + EncloseDoubleQuote(arrayQuery[x].remoteHost) + ' ';
+		l := l + 'port=' + arrayQuery[x].port + ' ';
+		l := l + 'protocol=' + EncloseDoubleQuote(arrayQuery[x].protocol) + ' ';
+		
+		if arrayQuery[x].status = 0 then
+			l := l + 'status=1'
+		else
+			l := l + 'status=0';
+		//l := l + IntToStr(arrayQuery[x].status);
+		WriteLn(l);
+		WriteLn(f, l); 
+	end; // of for
+	Close(f);
+end; // of procedure WriteResultsToSplunk
 
 
 procedure PortAdd(newPort: string; newProtocol: string);
@@ -345,22 +391,18 @@ begin
 			
 			WriteLn(remoteHost);
 			
-			if thicHost <> remoteHost then
+			if thisHost <> remoteHost then
 			//if gThisFqdn <> line then
 			begin
 				// Only process the other DC's. Do not check yourself!
 				// Now add a line per port per server to check
 				for x := 0 to High(arrayPort) do
 				begin
-					//WriteLn(arrayPort[x].port);
-					
-					QueryAdd(gThisFqdn, line, arrayPort[x].port, arrayPort[x].protocol);
-					Inc(giTotalPortsToCheck);
+					// Add a new query record for all the required ports from arrayPort.
+					QueryAdd(thisHost, remoteHost, arrayPort[x].port, arrayPort[x].protocol);
+					Inc(giTotalPortsToCheck); // Increase the port counter.
 				end; // of for
 			end; // of if
-			}
-			
-		
 		until Eof(f);
 		Close(f);
 	except
@@ -467,12 +509,13 @@ end; // of procedure ProgInit
 
 procedure ProgRun();
 begin
-	WriteLn(ResolveIp('VM60DC002.test.ns.nl'));
+	//WriteLn(ResolveIp('VM60DC002.test.ns.nl'));
 
 	DoPortCheck();
 	DoResolveIp();
 	QueryShow();
 	//WriteQueryResultsToLog();
+	WriteResultsToSplunk();
 end;
 
 
