@@ -99,7 +99,7 @@ var
 	arrayPort: TPort;
 	localIp: string;
 	//fileNameOut: string;
-	giTotalPortsToCheck: integer;
+	totalPortsToCheck: integer;
 	//rootDse: string;
 	//gbDoResolve: boolean;				// Turn on or off the resolving of IP addresses.
 	//gbDoCsv: boolean;
@@ -235,7 +235,10 @@ begin
 end; // of procedure QueryShow
 
 
-procedure WriteQueryResultsToLog();
+procedure WriteResultsToCsv();
+//
+//	Write the results a CSV file.
+//
 var
 	x: integer;
 	l: Ansistring;
@@ -251,7 +254,7 @@ begin
 	begin
 		// Create a new file and write a header to the file.
 		ReWrite(f);
-		WriteLn(f, 'check_dt;local_ip;local_host;remote_ip;remote_host;port;protocol;result');
+		WriteLn(f, 'set_dt;checked_dt;local_ip;local_host;local_fqdn;remote_ip;remote_host;remote_fqdn;port;protocol;result');
 	end
 	else
 		Append(f);
@@ -312,9 +315,9 @@ begin
 		l := l + 'protocol=' + EncloseDoubleQuote(arrayQuery[x].protocol) + ' ';
 		
 		if arrayQuery[x].status = 0 then
-			l := l + 'status=1'
+			l := l + 'result=1'
 		else
-			l := l + 'status=0';
+			l := l + 'result=0';
 		//l := l + IntToStr(arrayQuery[x].status);
 		WriteLn(l);
 		WriteLn(f, l); 
@@ -400,7 +403,7 @@ begin
 				begin
 					// Add a new query record for all the required ports from arrayPort.
 					QueryAdd(thisHost, remoteHost, arrayPort[x].port, arrayPort[x].protocol);
-					Inc(giTotalPortsToCheck); // Increase the port counter.
+					Inc(totalPortsToCheck); // Increase the port counter.
 				end; // of for
 			end; // of if
 		until Eof(f);
@@ -484,37 +487,30 @@ procedure ProgInit();
 //	Program initializer procedure
 //
 begin
+	// Initialize global variables.
 	thisHost := GetCurrentComputerName();
 	thisFqdn := UpperCase(thisHost) + '.' + LowerCase(GetDnsDomain());
 	localIp := ResolveIp(thisFqdn);
-	giTotalPortsToCheck := 0;
-
+	totalPortsToCheck := 0;
 	setDateTime := GetProperDateTime(Now());
 	
 	WriteLn('Computer host name:  ' + thisHost);
 	WriteLn('Computer FQDN:       ' + thisFqdn);
 	WriteLn('Computer IP address: ' + localIp);
 	
-
 	GetPorts();
-	//PortShow();
-	
 	FillQueryArray();
-	//QueryShow();
 	
-	WriteLn('Total number of ports to check: ', giTotalPortsToCheck);
-	
+	WriteLn('Total number of ports to check: ', totalPortsToCheck);
 end; // of procedure ProgInit
 
 
 procedure ProgRun();
 begin
-	//WriteLn(ResolveIp('VM60DC002.test.ns.nl'));
-
 	DoPortCheck();
 	DoResolveIp();
 	QueryShow();
-	//WriteQueryResultsToLog();
+	WriteResultsToCsv();
 	WriteResultsToSplunk();
 end;
 
