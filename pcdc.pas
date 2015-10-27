@@ -15,8 +15,6 @@
 //		3) Check with portqry.exe the ports.
 //
 //	VERSION:
-//		01				2015-06-03	Initial version.
-//		01-issue-8		2015-06-11	Use an resolve file to resolve the FQDN of IP addresses.
 //
 //	
 //	
@@ -25,19 +23,33 @@
 //
 //	FUNCTIONS AND PROCEDURES:
 //		function DoPortQuery
-//		function ResolveFqdnDc(ip: string): string;
-//		procedure GetAllDomainTrusts
-//		procedure PortQueryAdd
-//		procedure PortQueryShow
-//		procedure PortQueryShowWithResult
-//		procedure ExportResultToCsv
-//		procedure ExportResultToSql
-//		procedure PortQueryOnAll
-//		procedure PortAdd
-//		procedure PortShow
-//		procedure GetIpsPerDnsDomain
-//		procedure GetAllDcIpPerDnsDomain
-//		function GetFqdn(searchIp: string): string;
+//		function ResolveIp(fqdn: string): string;
+//		procedure QueryAdd(newLocalHost: string; newRemoteHost: string; newPort: string; newProtocol: string);
+//		procedure WriteResultsToCsv();
+//		procedure WriteResultsToSplunk();
+//		procedure PortAdd(newPort: string; newProtocol: string);
+//		procedure PortShow();
+//		procedure FillQueryArray();
+//		procedure GetPorts();
+//		procedure DoPortCheck();
+//		procedure DoResolveIp();
+//		procedure ProgInit();
+//		procedure ProgRun();
+//		procedure ProgDone();
+//
+//	FLOW:
+//		ProgInit
+//			GetPorts
+//				PortAdd
+//			FillQueryArray
+//				QueryAdd
+//		ProgRun
+//			DoResolveIp
+//				ResolveIp
+//			DoPortCheck
+//			WriteResultsToCsv
+//			WriteResultsToSplunk
+//		ProgDone
 //
 
 
@@ -60,9 +72,7 @@ const
 	VERSION =				'01';
 	DESCRIPTION =			'PortQueryDomainController';
 	ID = 					'149';		
-	FNAME_EXTRA =			'pqdc-extra.conf';
 	FNAME_PORT = 			'pqdc-port.conf';
-	FNAME_FQDN = 			'pqdc-fqdn.conf';
 	
 
 type
@@ -512,7 +522,7 @@ procedure ProgRun();
 begin
 	DoResolveIp();
 	DoPortCheck();
-	QueryShow();
+	//QueryShow();
 	WriteResultsToCsv();
 	WriteResultsToSplunk();
 end;
@@ -527,5 +537,5 @@ begin
 	ProgInit();
 	ProgRun();
 	//ProgTest();
-	//ProgDone();
+	ProgDone();
 end. // of program PortQueryDomainController.
