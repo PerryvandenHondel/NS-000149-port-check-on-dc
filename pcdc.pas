@@ -83,7 +83,7 @@ type
 		remoteFqdn: string;
 		port: string;			// The port number to check.
 		protocol: string;		// The protocol to test: UDP or TCP.
-		status: integer;		// Result of the portqry. 0=OK, 1=NOT LISTENING, 2=FILTERED or LISTENING
+		result: integer;		// Result of the PortQry. 0=OK, 1=NOT LISTENING, 2=FILTERED or LISTENING
 	end; // of record RQueryPorts.
 	TQuery = array of RQuery;
 
@@ -97,17 +97,11 @@ type
 var
 	arrayQuery: TQuery;
 	arrayPort: TPort;
-	localIp: string;
-	//fileNameOut: string;
-	totalPortsToCheck: integer;
-	//rootDse: string;
-	//gbDoResolve: boolean;				// Turn on or off the resolving of IP addresses.
-	//gbDoCsv: boolean;
-	//gbDoSql: boolean;
-	//gsLocalFqdn: string;				// Local FQDN.
-	//gaResolve: TResolve;				// 
+	localIp: string;					
+	totalPortsToCheck: integer;			// Counter of total ports to check
 	thisFqdn: string;					// Contains the current computer FQDN
 	thisHost: string;					// Contains the host name of the current computer
+	thisDnsDomain: string;
 	setDateTime: string;				// Contains the date time of program start, used for the set date time. Combine all checks in 1 program run.
 		
 
@@ -230,7 +224,7 @@ begin
 	WriteLn('QUERYSHOW()');
 	for x := 0 to High(arrayQuery) do
 	begin
-		WriteLn(x + 1:3, ': ' + arrayQuery[x].checked, ' ', arrayQuery[x].localHost, ' (', arrayQuery[x].localIp, ') >> ', arrayQuery[x].remoteHost, ' (', arrayQuery[x].remoteIp, ')  ', arrayQuery[x].port, ' ', arrayQuery[x].protocol, ' > ', arrayQuery[x].status);
+		WriteLn(x + 1:3, ': ' + arrayQuery[x].checked, ' ', arrayQuery[x].localHost, ' (', arrayQuery[x].localFqdn, '/', arrayQuery[x].localIp, ') >> ', arrayQuery[x].remoteHost, ' (', arrayQuery[x].remoteFqdn, '/', arrayQuery[x].remoteIp, ')  ', arrayQuery[x].port, ' ', arrayQuery[x].protocol, ' > ', arrayQuery[x].result);
 	end; // of for
 end; // of procedure QueryShow
 
@@ -239,6 +233,8 @@ procedure WriteResultsToCsv();
 //
 //	Write the results a CSV file.
 //
+const
+	SEPARATOR = ';';
 var
 	x: integer;
 	l: Ansistring;
@@ -261,18 +257,20 @@ begin
 	
 	for x := 0 to High(arrayQuery) do
 	begin
-		l := arrayQuery[x].checked + ';';
-		l := l + arrayQuery[x].localIp + ';';
-		l := l + arrayQuery[x].LocalHost + ';';
-		l := l + arrayQuery[x].remoteIp  + ';';
-		l := l + arrayQuery[x].remoteHost + ';';
-		l := l + arrayQuery[x].port + ';';
-		l := l + arrayQuery[x].protocol + ';';
-		if arrayQuery[x].status = 0 then
+		l := setDateTime + SEPARATOR;
+		l := l + arrayQuery[x].checked + SEPARATOR;
+		l := l + arrayQuery[x].localIp + SEPARATOR;
+		l := l + arrayQuery[x].LocalHost + SEPARATOR;
+		l := l + arrayQuery[x].LocalFqdn + SEPARATOR;
+		l := l + arrayQuery[x].remoteIp  + SEPARATOR;
+		l := l + arrayQuery[x].remoteHost + SEPARATOR;
+		l := l + arrayQuery[x].remoteFqdn + SEPARATOR;
+		l := l + arrayQuery[x].port + SEPARATOR;
+		l := l + arrayQuery[x].protocol + SEPARATOR;
+		if arrayQuery[x].result = 0 then
 			l := l + 'LISTENING'
 		else
 			l := l + 'FILTERED';
-		//l := l + IntToStr(arrayQuery[x].status);
 		
 		WriteLn(f, l); 
 	end; // of for
@@ -314,11 +312,11 @@ begin
 		l := l + 'port=' + arrayQuery[x].port + ' ';
 		l := l + 'protocol=' + EncloseDoubleQuote(arrayQuery[x].protocol) + ' ';
 		
-		if arrayQuery[x].status = 0 then
+		if arrayQuery[x].result = 0 then
 			l := l + 'result=1'
 		else
 			l := l + 'result=0';
-		//l := l + IntToStr(arrayQuery[x].status);
+		//l := l + IntToStr(arrayQuery[x].result);
 		WriteLn(l);
 		WriteLn(f, l); 
 	end; // of for
@@ -455,11 +453,12 @@ begin
 	WriteLn('DOPORTCHECK()');
 	for x := 0 to High(arrayQuery) do
 	begin
-		WriteLn(arrayQuery[x].localHost, '   ', arrayQuery[x].remoteHost, '   ', arrayQuery[x].port, ' ', arrayQuery[x].protocol);
+		WriteLn(x + 1:3, ': ', arrayQuery[x].localHost, ' >>> ', arrayQuery[x].remoteHost, ' on ', arrayQuery[x].port, ':', arrayQuery[x].protocol);
 		r := DoPortQuery(arrayQuery[x].remoteHost, arrayQuery[x].port, arrayQuery[x].protocol);
-		WriteLn('   RESULT>', r);
+		WriteLn('      RESULT=', r);
+		WriteLn;
 		
-		arrayQuery[x].status := r; // Set the result of the check in the arrayQuery
+		arrayQuery[x].result := r; // Set the result of the check in the arrayQuery
 		
 		arrayQuery[x].checked := GetProperDateTime(Now()); // Set the date time of the check in the arrayQuery
 	end; // of for
@@ -478,6 +477,9 @@ begin
 		
 		arrayQuery[x].localIp := localIp;
 		arrayQuery[x].remoteIp := remoteIp;
+		
+		arrayQuery[x].localFqdn := thisFqdn;
+		arrayQuery[x].remoteFqdn := arrayQuery[x].remoteHost + '.' + thisDnsDomain;
 	end; // of for
 end; // of procedure DoResolveIp()
 
@@ -488,8 +490,9 @@ procedure ProgInit();
 //
 begin
 	// Initialize global variables.
-	thisHost := GetCurrentComputerName();
-	thisFqdn := UpperCase(thisHost) + '.' + LowerCase(GetDnsDomain());
+	thisHost := UpperCase(GetCurrentComputerName());
+	thisDnsDomain := LowerCase(GetDnsDomain());
+	thisFqdn := thisHost + '.' + thisDnsDomain;
 	localIp := ResolveIp(thisFqdn);
 	totalPortsToCheck := 0;
 	setDateTime := GetProperDateTime(Now());
@@ -507,8 +510,8 @@ end; // of procedure ProgInit
 
 procedure ProgRun();
 begin
-	DoPortCheck();
 	DoResolveIp();
+	DoPortCheck();
 	QueryShow();
 	WriteResultsToCsv();
 	WriteResultsToSplunk();
