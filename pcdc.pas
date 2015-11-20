@@ -248,22 +248,25 @@ const
 var
 	x: integer;
 	l: Ansistring;
-	fname: string;
 	f: TextFile;
+	pathCsv: string;
 begin
-	fname := GetCurrentComputerName() + '_' + GetDateFs(true) + '.csv';
+	pathCsv := GetProgramFolder() + '\output\' + GetCurrentComputerName() + '_' + GetDateFs(true) + '.csv';
+	MakeFolderTree(pathCsv);
 	
-	Assign(f, fname);
-	WriteLn(fname);
+	Assign(f, pathCsv);
 	
-	if FileExists(fname) = false then
+	if FileExists(pathCsv) = false then
 	begin
-		// Create a new file and write a header to the file.
+		WriteLn('A new file, writing header to ', pathCsv);
 		ReWrite(f);
 		WriteLn(f, 'set_dt;checked_dt;local_ip;local_host;local_fqdn;remote_ip;remote_host;remote_fqdn;port;protocol;result');
 	end
 	else
 		Append(f);
+	
+	
+	WriteLn('Writing data to file: ', pathCsv);
 	
 	for x := 0 to High(arrayQuery) do
 	begin
@@ -292,28 +295,23 @@ procedure WriteResultsToSplunk();
 var
 	x: integer;
 	l: Ansistring;
-	fname: string;
 	f: TextFile;
+	pathSkv: string;
 begin
-	// Build the file name to store the Splunk data.
-	fname := GetProgramFolder() + '\' + thisHost + '\' + GetDateFs(true) + '.skv';
 	
-	// Create the folder tree to store the file.
-	MakeFolderTree(fname);
+	pathSkv := GetProgramFolder() + '\output\' + GetCurrentComputerName() + '_' + GetDateFs(true) + '.skv';
+	MakeFolderTree(pathSkv);
 	
 	// Assign the file and create (non-existing file) the file or reopen (existing file) it.
-	Assign(f, fname);
-	WriteLn(fname);
+	Assign(f, pathSkv);
 	
-	if FileExists(fname) = false then
-	begin
-		// Create a new file and write a header to the file.
-		ReWrite(f);
-		//WriteLn(f, 'check_dt;local_ip;local_host;remote_ip;remote_host;port;protocol;result');
-	end
+	if FileExists(pathSkv) = false then
+		ReWrite(f)
 	else
 		Append(f);
 
+	WriteLn('Writing data to file: ', pathSkv);
+		
 	for x := 0 to High(arrayQuery) do
 	begin
 		l := setDateTime + ' ';
@@ -327,7 +325,7 @@ begin
 		else
 			l := l + 'result=0';
 		//l := l + IntToStr(arrayQuery[x].result);
-		WriteLn(l);
+		//WriteLn(l);
 		WriteLn(f, l); 
 	end; // of for
 	Close(f);
